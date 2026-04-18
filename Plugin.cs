@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace WorldMod.Speed
 {
-    [BepInPlugin("com.game.worldspeed", "World Speed Controller", "1.3.0")]
+    [BepInPlugin("com.game.worldspeed", "World Speed Controller", "1.4.0")]
     public class WorldSpeedPlugin : BaseUnityPlugin
     {
         private bool _showMenu = false;
@@ -16,9 +16,6 @@ namespace WorldMod.Speed
         private float _level = 1.0f;
         private float _currentSpeed = 1.0f;
         private float _pulseTimer = 0f;
-
-        // List to store found NPCs for the scanner display
-        private List<string> _foundNames = new List<string>();
 
         void Awake()
         {
@@ -35,10 +32,7 @@ namespace WorldMod.Speed
             if (!_showMenu)
                 _bubbleRect = GUI.Window(99, _bubbleRect, DrawBubble, "DRAG");
             else
-            {
-                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "DEEP SCANNER MOD");
-                DrawDeepScanner();
-            }
+                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "SPRINTMASTER CONTROL");
         }
 
         void DrawBubble(int windowID)
@@ -53,16 +47,16 @@ namespace WorldMod.Speed
             float val = Mathf.Floor(_level);
             _currentSpeed = (_selectedMode == 0) ? val : (_selectedMode == 1 ? 1f / val : 1f);
             
-            GUILayout.Label($"<size=35>Force Speed: {_currentSpeed:F2}x</size>");
+            GUILayout.Label($"<size=35>Race Speed: {_currentSpeed:F2}x</size>");
 
-            if (GUILayout.Toggle(_selectedMode == 0, " FAST")) _selectedMode = 0;
-            if (GUILayout.Toggle(_selectedMode == 1, " SLOW")) _selectedMode = 1;
+            if (GUILayout.Toggle(_selectedMode == 0, " SUPER FAST")) _selectedMode = 0;
+            if (GUILayout.Toggle(_selectedMode == 1, " SUPER SLOW")) _selectedMode = 1;
             if (GUILayout.Toggle(_selectedMode == 2, " NORMAL")) _selectedMode = 2;
 
             _level = GUILayout.HorizontalSlider(_level, 1f, 10f);
             
             GUILayout.Space(20);
-            if (GUILayout.Button("FORCE GLOBAL SEARCH", GUILayout.Height(80))) { ApplyToAllNpcs(); }
+            if (GUILayout.Button("FORCE RACE START", GUILayout.Height(100))) { ApplyToRace(); }
             
             if (GUILayout.Button("CLOSE", GUILayout.Height(60))) { 
                 PlayerPrefs.SetFloat("Mod_BubbleX", _bubbleRect.x);
@@ -74,28 +68,18 @@ namespace WorldMod.Speed
             GUI.DragWindow();
         }
 
-        void DrawDeepScanner()
-        {
-            GUI.Box(new Rect(10, 820, 800, 250), "QUEST ENTITY RADAR");
-            for (int i = 0; i < _foundNames.Count && i < 6; i++)
-            {
-                GUI.Label(new Rect(20, 860 + (i * 30), 750, 30), $"<size=22>{_foundNames[i]}</size>");
-            }
-        }
-
         void Update()
         {
             _pulseTimer += Time.deltaTime;
-            if (_pulseTimer >= 2.0f) 
+            if (_pulseTimer >= 0.5f) // Pulse very fast to stay ahead of the game logic
             {
-                ApplyToAllNpcs();
+                ApplyToRace();
                 _pulseTimer = 0;
             }
         }
 
-        private void ApplyToAllNpcs()
+        private void ApplyToRace()
         {
-            _foundNames.Clear();
             GameObject[] all = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
             
             for (int i = 0; i < all.Length; i++)
@@ -103,24 +87,28 @@ namespace WorldMod.Speed
                 GameObject obj = all[i];
                 if (obj == null) continue;
 
-                string n = obj.name.ToUpper();
+                string n = obj.name.ToLower();
                 
-                // If it's a character or NPC, we want it.
-                // Added "QUEST" and "SWIFT" and "RUN" to the search
-                if (n.Contains("SWIFT") || n.Contains("SPRINT") || n.Contains("SPEED") || n.Contains("QUEST") || n.Contains("RUN"))
+                // Targets based on your radar: Sprintmaster Runner (Layer 19) and Quest objects
+                if (obj.layer == 19 || n.Contains("sprintmaster") || n.Contains("runner") || n.Contains("swift"))
                 {
-                    _foundNames.Add($"FOUND: [{obj.layer}] {obj.name}");
-
-                    // FORCE EVERYTHING
+                    // Force the Master TimeScale of the object
                     obj.SendMessage("set_timeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+                    
+                    // Force PlayMaker Quest Logic
                     obj.SendMessage("SetFsmSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("SetFsmTimeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     
-                    Animator[] anims = obj.GetComponentsInChildren<Animator>(true);
-                    for (int j = 0; j < anims.Length; j++) { anims[j].speed = _currentSpeed; }
-
+                    // Force the actual Runner speed
                     obj.SendMessage("SetSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("set_speed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+
+                    // Reach deep into the animations
+                    Animator[] anims = obj.GetComponentsInChildren<Animator>(true);
+                    for (int j = 0; j < anims.Length; j++) 
+                    { 
+                        anims[j].speed = _currentSpeed; 
+                    }
                 }
             }
         }
