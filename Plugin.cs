@@ -4,7 +4,7 @@ using System;
 
 namespace WorldMod.Speed
 {
-    [BepInPlugin("com.game.worldspeed", "World Speed Controller", "1.2.0")]
+    [BepInPlugin("com.game.worldspeed", "World Speed Controller", "1.2.1")]
     public class WorldSpeedPlugin : BaseUnityPlugin
     {
         private bool _showMenu = false;
@@ -74,7 +74,6 @@ namespace WorldMod.Speed
 
         void DrawEntityScanner()
         {
-            // NEW: Filters for active objects to find the NPC faster
             GameObject[] all = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
             int yOffset = 0;
             GUI.Box(new Rect(10, 700, 750, 350), "ACTIVE NEARBY ENTITIES");
@@ -86,7 +85,6 @@ namespace WorldMod.Speed
                 float dist = Vector3.Distance(obj.transform.position, Camera.main.transform.position);
                 if (dist < 15f) 
                 {
-                    // If it contains SWIFT, highlight it in the scanner
                     string color = obj.name.ToUpper().Contains("SWIFT") ? "yellow" : "white";
                     GUI.Label(new Rect(20, 740 + (yOffset * 30), 700, 30), $"<color={color}>[{obj.layer}] {obj.name}</color>");
                     yOffset++;
@@ -98,7 +96,7 @@ namespace WorldMod.Speed
         void Update()
         {
             _pulseTimer += Time.deltaTime;
-            if (_pulseTimer >= 1.5f) // Pulse slightly faster
+            if (_pulseTimer >= 1.5f) 
             {
                 ApplyToNpc();
                 _pulseTimer = 0;
@@ -107,25 +105,30 @@ namespace WorldMod.Speed
 
         private void ApplyToNpc()
         {
-            GameObject[] all = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-            foreach (var obj in all)
+            GameObject[] allObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+            for (int i = 0; i < allObjects.Length; i++)
             {
+                GameObject obj = allObjects[i];
                 if (obj == null) continue;
-                string name = obj.name.ToUpper();
+                
+                string n = obj.name.ToUpper();
 
-                [span_2](start_span)// BROAD TARGETING: Catching all variations of Sprintmaster Swift[span_2](end_span)
-                if (name.Contains("SPRINT") || name.Contains("SPEED") || name.Contains("SWIFT"))
+                if (n.Contains("SPRINT") || n.Contains("SPEED") || n.Contains("SWIFT"))
                 {
-                    // 1. Force the logic speed
+                    // Logic speed
                     obj.SendMessage("SetFsmSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("SetFsmTimeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
 
-                    // 2. Force the visuals (Spine and Unity Animator)
+                    // Animation speed
                     obj.SendMessage("set_timeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
-                    var anims = obj.GetComponentsInChildren<Animator>(true);
-                    foreach(var a in anims) { a.speed = _currentSpeed; }
+                    
+                    Animator[] anims = obj.GetComponentsInChildren<Animator>(true);
+                    for (int j = 0; j < anims.Length; j++) 
+                    { 
+                        anims[j].speed = _currentSpeed; 
+                    }
 
-                    // 3. Force physics movement
+                    // Physics movement
                     obj.SendMessage("SetSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("set_speed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                 }
