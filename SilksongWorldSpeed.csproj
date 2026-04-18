@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="UnityEngine.Modules" Version="6000.0.51" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="BepInEx">
       <HintPath>BepInEx.dll</HintPath>
       <Private>false</Private>
