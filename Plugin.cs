@@ -8,69 +8,79 @@ namespace WorldMod.Speed
     public class WorldSpeedPlugin : BaseUnityPlugin
     {
         private bool _showMenu = false;
-        private Rect _windowRect = new Rect(100, 100, 400, 450);
         
-        // Settings to Save
+        // Moveable Bubble Rect
+        private Rect _bubbleRect = new Rect(20, 300, 120, 60); 
+        private Rect _windowRect = new Rect(100, 100, 400, 500);
+        
         private int _selectedMode = 2; // 0=Inc, 1=Dec, 2=Norm
         private float _level = 1.0f;
+        private float _currentSpeedMult = 1.0f;
 
         void Awake()
         {
-            // Load saved settings when the game starts
+            // Load saved position and settings
+            _bubbleRect.x = PlayerPrefs.GetFloat("BubbleX", 20);
+            _bubbleRect.y = PlayerPrefs.GetFloat("BubbleY", 300);
             _selectedMode = PlayerPrefs.GetInt("Mod_SpeedMode", 2);
             _level = PlayerPrefs.GetFloat("Mod_SpeedLevel", 1.0f);
-            Logger.LogInfo("Speed Mod: Settings Loaded from Memory");
         }
 
         void OnGUI()
         {
-            // 1. Small "Floating Bubble" to open/re-open the menu
             if (!_showMenu)
             {
-                if (GUI.Button(new Rect(10, 150, 100, 50), "MOD MENU")) _showMenu = true;
+                // DRAGGABLE BUBBLE LOGIC
+                // We use a GUI.Window for the bubble too, so it can be dragged!
+                _bubbleRect = GUI.Window(1, _bubbleRect, DrawBubble, "");
             }
-
-            // 2. The Main Window
-            if (_showMenu)
+            else
             {
-                _windowRect = GUI.Window(0, _windowRect, DrawWindow, "MASTER MOD CONTROL");
+                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "ENEMY SPEED CONTROL");
             }
         }
 
-        void DrawWindow(int windowID)
+        // The logic for the small floating bubble
+        void DrawBubble(int windowID)
+        {
+            if (GUI.Button(new Rect(0, 0, _bubbleRect.width, _bubbleRect.height), "SPEED MOD"))
+            {
+                _showMenu = true;
+            }
+            // This line makes the bubble draggable on your screen
+            GUI.DragWindow(new Rect(0, 0, 10000, 10000));
+        }
+
+        void DrawMainWindow(int windowID)
         {
             GUILayout.BeginVertical();
             GUILayout.Space(10);
-            GUILayout.Label("--- WORLD SPEED SETTINGS ---", GUI.skin.label);
 
-            // Increase Mode
-            if (GUILayout.Toggle(_selectedMode == 0, " INCREASE SPEED")) _selectedMode = 0;
+            // Logic: 1x to 5x
+            if (GUILayout.Toggle(_selectedMode == 0, " [MODE] INCREASE SPEED")) _selectedMode = 0;
             if (_selectedMode == 0)
             {
-                GUILayout.Label($"Level: {(int)_level}");
+                GUILayout.Label($"Enemy Action Speed: {(int)_level}X");
                 _level = GUILayout.HorizontalSlider(_level, 1f, 5f);
             }
 
-            GUILayout.Space(10);
+            GUILayout.Space(15);
 
-            // Decrease Mode
-            if (GUILayout.Toggle(_selectedMode == 1, " DECREASE SPEED")) _selectedMode = 1;
+            if (GUILayout.Toggle(_selectedMode == 1, " [MODE] DECREASE SPEED")) _selectedMode = 1;
             if (_selectedMode == 1)
             {
-                GUILayout.Label($"Level: {(int)_level}");
+                GUILayout.Label($"Enemy Action Slowness: {(int)_level}");
                 _level = GUILayout.HorizontalSlider(_level, 1f, 5f);
             }
 
-            GUILayout.Space(10);
+            GUILayout.Space(15);
 
-            // Normal Mode
-            if (GUILayout.Toggle(_selectedMode == 2, " NORMAL (OFF)")) _selectedMode = 2;
+            if (GUILayout.Toggle(_selectedMode == 2, " [MODE] NORMAL")) _selectedMode = 2;
 
             GUILayout.FlexibleSpace();
 
-            // SAVE AND CLOSE BUTTON
             GUI.color = Color.green;
-            if (GUILayout.Button("SAVE & CLOSE MENU", GUILayout.Height(50)))
+            if (GUILayout.Button("SAVE & CLOSE", GUILayout.Height(60)))
             {
                 SaveSettings();
                 _showMenu = false;
@@ -78,42 +88,44 @@ namespace WorldMod.Speed
             GUI.color = Color.white;
 
             GUILayout.EndVertical();
-            GUI.DragWindow(); // Makes the window draggable
+            GUI.DragWindow();
         }
 
         void SaveSettings()
         {
             PlayerPrefs.SetInt("Mod_SpeedMode", _selectedMode);
             PlayerPrefs.SetFloat("Mod_SpeedLevel", _level);
+            PlayerPrefs.SetFloat("BubbleX", _bubbleRect.x);
+            PlayerPrefs.SetFloat("BubbleY", _bubbleRect.y);
             PlayerPrefs.Save();
-            Logger.LogInfo("Speed Mod: Settings Saved!");
         }
 
         void Update()
         {
-            float targetSpeed = 1.0f;
-            if (_selectedMode == 0) targetSpeed = 1.0f + ((float)Math.Floor(_level) * 0.8f);
-            else if (_selectedMode == 1) targetSpeed = 1.0f - ((float)Math.Floor(_level) * 0.15f);
+            if (_selectedMode == 0) _currentSpeedMult = (float)Math.Floor(_level);
+            else if (_selectedMode == 1) _currentSpeedMult = 1.0f / (float)Math.Floor(_level);
+            else _currentSpeedMult = 1.0f;
 
-            ApplySpeed(targetSpeed);
+            ApplyTargetedSpeed();
         }
 
-        private void ApplySpeed(float speed)
+        private void ApplyTargetedSpeed()
         {
-            // Improved Filter to ignore UI and Dialogues
             Animator[] anims = UnityEngine.Object.FindObjectsByType<Animator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var anim in anims)
             {
                 if (anim == null) continue;
-                GameObject obj = anim.gameObject;
+                int layer = anim.gameObject.layer;
 
-                // Protect Player (9), UI (5), and common Dialogue/Menu names
-                if (obj.layer == 9 || obj.layer == 5 || obj.name.ToLower().Contains("ui") || obj.name.ToLower().Contains("dialogue"))
+                // Targeted Layers: 11 (Enemy), 12 (NPC), 17 (Enemy Projectiles)
+                if (layer == 11 || layer == 12 || layer == 17)
+                {
+                    anim.speed = _currentSpeedMult;
+                }
+                else if (layer == 9 || layer == 5) // Skip Player/UI
                 {
                     anim.speed = 1.0f;
-                    continue;
                 }
-                anim.speed = speed;
             }
         }
     }
