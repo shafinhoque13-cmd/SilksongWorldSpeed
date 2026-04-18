@@ -9,12 +9,11 @@ namespace WorldMod.Speed
     {
         private bool _showMenu = false;
         private Rect _bubbleRect = new Rect(50, 300, 200, 100); 
-        private Rect _windowRect = new Rect(100, 100, 500, 600);
+        private Rect _windowRect = new Rect(100, 100, 500, 500);
         
         private int _selectedMode = 2; 
         private float _level = 1.0f;
         private float _currentSpeed = 1.0f;
-        private float _pulseTimer = 0f;
 
         void Awake()
         {
@@ -26,18 +25,17 @@ namespace WorldMod.Speed
 
         void OnGUI()
         {
-            // Fixes touch/UI scaling for mobile
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(Screen.width / 1920f, Screen.height / 1080f, 1));
 
             if (!_showMenu)
                 _bubbleRect = GUI.Window(99, _bubbleRect, DrawBubble, "DRAG AREA");
             else
-                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "NPC MASTER CONTROL");
+                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "NPC SPEED MOD");
         }
 
         void DrawBubble(int windowID)
         {
-            if (GUI.Button(new Rect(10, 35, 180, 55), "OPEN MENU")) _showMenu = true;
+            if (GUI.Button(new Rect(10, 35, 180, 55), "MENU")) _showMenu = true;
             GUI.DragWindow(new Rect(0, 0, 200, 30));
         }
 
@@ -47,68 +45,45 @@ namespace WorldMod.Speed
             float val = Mathf.Floor(_level);
             _currentSpeed = (_selectedMode == 0) ? val : (_selectedMode == 1 ? 1f / val : 1f);
             
-            GUILayout.Label($"<size=30>NPC Power: {_currentSpeed:F2}x</size>");
+            GUILayout.Label($"<size=30>NPC Target: {_currentSpeed:F2}x</size>");
 
-            if (GUILayout.Toggle(_selectedMode == 0, " SUPER FAST")) _selectedMode = 0;
-            if (GUILayout.Toggle(_selectedMode == 1, " SUPER SLOW")) _selectedMode = 1;
+            if (GUILayout.Toggle(_selectedMode == 0, " FAST")) _selectedMode = 0;
+            if (GUILayout.Toggle(_selectedMode == 1, " SLOW")) _selectedMode = 1;
             if (GUILayout.Toggle(_selectedMode == 2, " NORMAL")) _selectedMode = 2;
 
             _level = GUILayout.HorizontalSlider(_level, 1f, 10f);
             
-            GUILayout.Space(40);
-            if (GUILayout.Button("FORCE UPDATE ALL NPCs", GUILayout.Height(80))) { ForcePulse(); }
+            GUILayout.Space(30);
+            if (GUILayout.Button("APPLY TO SPRINTMASTER", GUILayout.Height(80))) { ForceNpcSpeed(); }
             
-            if (GUILayout.Button("SAVE & CLOSE", GUILayout.Height(80))) { SaveSettings(); _showMenu = false; }
+            if (GUILayout.Button("CLOSE", GUILayout.Height(60))) { 
+                PlayerPrefs.SetFloat("Mod_BubbleX", _bubbleRect.x);
+                PlayerPrefs.SetFloat("Mod_BubbleY", _bubbleRect.y);
+                PlayerPrefs.Save();
+                _showMenu = false; 
+            }
             GUILayout.EndVertical();
             GUI.DragWindow();
         }
 
-        void Update()
+        private void ForceNpcSpeed()
         {
-            // Safety: Keep player timescale at 1.0
-            Time.timeScale = 1.0f;
-
-            // Slow Pulse: Update everything on the NPC layer every 2 seconds to keep FPS high
-            _pulseTimer += Time.deltaTime;
-            if (_pulseTimer >= 2.0f)
+            // We search only when you click the button to prevent FPS lag
+            GameObject[] all = UnityEngine.Object.FindObjectsOfType<GameObject>();
+            foreach (var obj in all)
             {
-                ForcePulse();
-                _pulseTimer = 0;
-            }
-        }
-
-        private void ForcePulse()
-        {
-            // We search for everything, but filter by LAYER to save performance
-            GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
-            foreach (GameObject obj in allObjects)
-            {
-                // Layer 12 is the standard NPC layer. Layer 11 is Enemies.
-                if (obj.layer == 12 || obj.layer == 11)
+                // Target by name (found in your .dat) and common NPC layers
+                if (obj.name.Contains("Sprintmaster") || obj.layer == 12)
                 {
-                    // 1. Force the Animator (Unity standard)
-                    var anim = obj.GetComponentInChildren<Animator>(true);
-                    if (anim != null) anim.speed = _currentSpeed;
-
-                    // 2. Force PlayMaker FSMs (The 'Brain' of Sprintmaster)
-                    obj.SendMessage("SetFsmSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
-
-                    // 3. Force Spine Skeleton (The visual skeleton)
+                    // Target the Spine Skeleton directly
                     obj.SendMessage("set_timeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+                    // Target the PlayMaker Logic
+                    obj.SendMessage("SetFsmSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     
-                    // 4. Force Custom Speed Variables
-                    obj.SendMessage("set_speed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+                    var anim = obj.GetComponentInChildren<Animator>();
+                    if (anim != null) anim.speed = _currentSpeed;
                 }
             }
-        }
-
-        void SaveSettings()
-        {
-            PlayerPrefs.SetFloat("Mod_BubbleX", _bubbleRect.x);
-            PlayerPrefs.SetFloat("Mod_BubbleY", _bubbleRect.y);
-            PlayerPrefs.SetInt("Mod_SpeedMode", _selectedMode);
-            PlayerPrefs.SetFloat("Mod_SpeedLevel", _level);
-            PlayerPrefs.Save();
         }
     }
 }
