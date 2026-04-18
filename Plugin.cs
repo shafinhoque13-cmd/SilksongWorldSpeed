@@ -17,16 +17,12 @@ namespace WorldMod.Speed
         private float _currentSpeedMult = 1.0f;
         private float _updateTimer = 0f;
 
-        // Cache to store found objects and improve performance
-        private HashSet<int> _processedObjects = new HashSet<int>();
-
         void Awake()
         {
             _bubbleRect.x = PlayerPrefs.GetFloat("Mod_BubbleX", 20);
             _bubbleRect.y = PlayerPrefs.GetFloat("Mod_BubbleY", 300);
             _selectedMode = PlayerPrefs.GetInt("Mod_SpeedMode", 2);
             _level = PlayerPrefs.GetFloat("Mod_SpeedLevel", 1.0f);
-            Logger.LogInfo("Speed Mod: Deep Scanning Enabled");
         }
 
         void OnGUI()
@@ -47,7 +43,7 @@ namespace WorldMod.Speed
             GUILayout.Space(10);
             
             float displayVal = (_selectedMode == 1) ? (1.0f / Mathf.Floor(_level)) : Mathf.Floor(_level);
-            GUILayout.Label($"<size=18><b>NPC Speed Multiplier: {displayVal:F2}x</b></size>", new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, richText = true });
+            GUILayout.Label($"Multiplier: {displayVal:F2}x", GUI.skin.label);
 
             GUILayout.Space(20);
             if (GUILayout.Toggle(_selectedMode == 0, " [MODE] FAST ENEMIES")) _selectedMode = 0;
@@ -55,13 +51,11 @@ namespace WorldMod.Speed
             if (GUILayout.Toggle(_selectedMode == 2, " [MODE] NORMAL (1.0x)")) _selectedMode = 2;
 
             GUILayout.Space(10);
-            GUILayout.Label($"Intensity Level: {(int)_level}");
+            GUILayout.Label($"Level: {(int)_level}");
             _level = GUILayout.HorizontalSlider(_level, 1f, 5f);
 
             GUILayout.Space(30);
-            GUI.color = Color.cyan;
             if (GUILayout.Button("FORCE SCAN AREA", GUILayout.Height(60))) { DeepUpdateNPCs(); }
-            GUI.color = Color.white;
 
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("SAVE & APPLY", GUILayout.Height(70))) 
@@ -78,7 +72,6 @@ namespace WorldMod.Speed
             float floorLevel = Mathf.Floor(_level);
             _currentSpeedMult = _selectedMode == 0 ? floorLevel : (_selectedMode == 1 ? 1.0f / floorLevel : 1.0f);
 
-            // Frequent updates to catch newly spawned NPCs
             _updateTimer += Time.deltaTime;
             if (_updateTimer >= 0.5f)
             {
@@ -89,34 +82,35 @@ namespace WorldMod.Speed
 
         private void DeepUpdateNPCs()
         {
-            // We keep global time normal to protect Hornet's physics
-            Time.timeScale = 1.0f;
+            Time.timeScale = 1.0f; // Lock player physics
 
-            // Find EVERY object to ensure nothing is missed
             GameObject[] allObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             
             foreach (GameObject obj in allObjects)
             {
                 if (obj == null) continue;
 
-                // LAYER FILTER: 11=Enemy, 12=NPC, 17=Projectiles, 22=EnemyDetector
-                // Specifically EXCLUDING Layer 9 (Player)
+                // Targeted Layers: 11=Enemy, 12=NPC, 17=Projectiles, 22=EnemyDetector
                 if (obj.layer == 11 || obj.layer == 12 || obj.layer == 17 || obj.layer == 22)
                 {
-                    // 1. Force standard Unity Animators
+                    // Update Animators
                     Animator[] anims = obj.GetComponentsInChildren<Animator>();
                     foreach(var a in anims) { a.speed = _currentSpeedMult; }
 
-                    // 2. Force Physics (Rigidbody2D)
+                    // Update Physics (Handling both old and new Unity physics names)
                     Rigidbody2D[] rbs = obj.GetComponentsInChildren<Rigidbody2D>();
                     foreach(var rb in rbs)
                     {
-                        // Some movement scripts use velocity; we "nudge" it
-                        if (_selectedMode != 2) rb.velocity *= _currentSpeedMult;
+                        try {
+                            rb.linearVelocity *= _currentSpeedMult;
+                        } catch {
+                            #pragma warning disable CS0618
+                            rb.velocity *= _currentSpeedMult;
+                            #pragma warning restore CS0618
+                        }
                     }
 
-                    // 3. Attack common NPC Speed Variables (Reflection alternative)
-                    // We send these messages to hit hidden scripts or Spine/FSMs
+                    // Deep Script Hooks
                     obj.SendMessage("set_speed", _currentSpeedMult, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("set_timeScale", _currentSpeedMult, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("SetFsmSpeed", _currentSpeedMult, SendMessageOptions.DontRequireReceiver);
