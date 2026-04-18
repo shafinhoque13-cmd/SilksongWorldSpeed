@@ -68,16 +68,18 @@ namespace WorldMod.Speed
 
         private void ForceNpcSpeed()
         {
-            // We search only when you click the button to prevent FPS lag
-            GameObject[] all = UnityEngine.Object.FindObjectsOfType<GameObject>();
+            // FIX: Using FindObjectsByType with SortMode.None is much faster and fixes the warnings
+            GameObject[] all = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
+            
             foreach (var obj in all)
             {
-                // Target by name (found in your .dat) and common NPC layers
+                if (obj == null) continue;
+
+                // Targeting Sprintmaster specifically as identified in your .dat world data
                 if (obj.name.Contains("Sprintmaster") || obj.layer == 12)
                 {
-                    // Target the Spine Skeleton directly
+                    // Target Spine/Logic
                     obj.SendMessage("set_timeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
-                    // Target the PlayMaker Logic
                     obj.SendMessage("SetFsmSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     
                     var anim = obj.GetComponentInChildren<Animator>();
