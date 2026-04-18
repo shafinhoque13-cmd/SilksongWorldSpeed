@@ -9,7 +9,7 @@ namespace WorldMod.Speed
     {
         private bool _showMenu = false;
         private Rect _bubbleRect = new Rect(50, 300, 200, 100); 
-        private Rect _windowRect = new Rect(100, 100, 500, 500);
+        private Rect _windowRect = new Rect(100, 100, 500, 550);
         
         private int _selectedMode = 2; 
         private float _level = 1.0f;
@@ -28,9 +28,9 @@ namespace WorldMod.Speed
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(Screen.width / 1920f, Screen.height / 1080f, 1));
 
             if (!_showMenu)
-                _bubbleRect = GUI.Window(99, _bubbleRect, DrawBubble, "DRAG AREA");
+                _bubbleRect = GUI.Window(99, _bubbleRect, DrawBubble, "DRAG HERE");
             else
-                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "NPC SPEED MOD");
+                _windowRect = GUI.Window(0, _windowRect, DrawMainWindow, "NPC MASTER");
         }
 
         void DrawBubble(int windowID)
@@ -45,7 +45,7 @@ namespace WorldMod.Speed
             float val = Mathf.Floor(_level);
             _currentSpeed = (_selectedMode == 0) ? val : (_selectedMode == 1 ? 1f / val : 1f);
             
-            GUILayout.Label($"<size=30>NPC Target: {_currentSpeed:F2}x</size>");
+            GUILayout.Label($"<size=30>Target Speed: {_currentSpeed:F2}x</size>");
 
             if (GUILayout.Toggle(_selectedMode == 0, " FAST")) _selectedMode = 0;
             if (GUILayout.Toggle(_selectedMode == 1, " SLOW")) _selectedMode = 1;
@@ -54,7 +54,8 @@ namespace WorldMod.Speed
             _level = GUILayout.HorizontalSlider(_level, 1f, 10f);
             
             GUILayout.Space(30);
-            if (GUILayout.Button("APPLY TO SPRINTMASTER", GUILayout.Height(80))) { ForceNpcSpeed(); }
+            // This button now does a "Deep Scan"
+            if (GUILayout.Button("FORCE SPRINTMASTER", GUILayout.Height(80))) { ForceDeepNpc(); }
             
             if (GUILayout.Button("CLOSE", GUILayout.Height(60))) { 
                 PlayerPrefs.SetFloat("Mod_BubbleX", _bubbleRect.x);
@@ -66,24 +67,33 @@ namespace WorldMod.Speed
             GUI.DragWindow();
         }
 
-        private void ForceNpcSpeed()
+        private void ForceDeepNpc()
         {
-            // FIX: Using FindObjectsByType with SortMode.None is much faster and fixes the warnings
+            // Use the faster FindObjectsByType
             GameObject[] all = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
             
             foreach (var obj in all)
             {
                 if (obj == null) continue;
 
-                // Targeting Sprintmaster specifically as identified in your .dat world data
+                // Check for Sprintmaster or any NPC on Layer 12
                 if (obj.name.Contains("Sprintmaster") || obj.layer == 12)
                 {
-                    // Target Spine/Logic
-                    obj.SendMessage("set_timeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+                    // 1. Force the PlayMaker FSM timeScale (The 'Brain')
+                    // Many mobile ports use "SetFsmTimeScale" instead of "SetFsmSpeed"
+                    obj.SendMessage("SetFsmTimeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     obj.SendMessage("SetFsmSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+
+                    // 2. Force the Spine Skeleton (The 'Body')
+                    obj.SendMessage("set_timeScale", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                     
+                    // 3. Force standard Unity Animator
                     var anim = obj.GetComponentInChildren<Animator>();
                     if (anim != null) anim.speed = _currentSpeed;
+
+                    // 4. Manual variable injection (Covers custom logic)
+                    obj.SendMessage("set_speed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
+                    obj.SendMessage("SetSpeed", _currentSpeed, SendMessageOptions.DontRequireReceiver);
                 }
             }
         }
